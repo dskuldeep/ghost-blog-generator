@@ -1,0 +1,174 @@
+// Flo Blog Generator — data model
+// See plan: AI Blog Generator → Ghost Publisher
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+// Singleton row (id = "singleton") holding app configuration + encrypted secrets.
+model Settings {
+  id                 String   @id @default("singleton")
+  geminiApiKeyEnc    String?
+  geminiModel        String   @default("gemini-2.5-pro")
+  temperature        Float    @default(0.7)
+  maxResearchCalls   Int      @default(8)
+  maxReviseIterations Int     @default(2)
+  evalThreshold      Float    @default(0.8)
+  ghostApiUrl        String?
+  ghostAdminKeyEnc   String?
+  heroStyle          Json?
+  updatedAt          DateTime @updatedAt @default(now())
+}
+
+enum TopicStatus {
+  pending
+  queued
+  running
+  drafted
+  published
+  failed
+}
+
+model Topic {
+  id        String      @id @default(cuid())
+  title     String
+  brief     String?
+  status    TopicStatus @default(pending)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  blogs     Blog[]
+  runs      Run[]
+}
+
+model Skill {
+  id              String         @id @default(cuid())
+  name            String
+  description     String?
+  activeVersionId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  versions        SkillVersion[]
+}
+
+model SkillVersion {
+  id        String      @id @default(cuid())
+  skillId   String
+  skill     Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version   Int
+  message   String?
+  skillMd   String      @db.Text
+  createdAt DateTime    @default(now())
+  files     SkillFile[]
+  blogs     Blog[]
+  runs      Run[]
+
+  @@unique([skillId, version])
+  @@index([skillId])
+}
+
+model SkillFile {
+  id             String       @id @default(cuid())
+  skillVersionId String
+  skillVersion   SkillVersion @relation(fields: [skillVersionId], references: [id], onDelete: Cascade)
+  path           String
+  content        String       @db.Text
+
+  @@unique([skillVersionId, path])
+  @@index([skillVersionId])
+}
+
+enum BlogStatus {
+  drafting
+  drafted
+  publishing
+  published
+  failed
+}
+
+model Blog {
+  id             String        @id @default(cuid())
+  topicId        String?
+  topic          Topic?        @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  skillVersionId String?
+  skillVersion   SkillVersion? @relation(fields: [skillVersionId], references: [id], onDelete: SetNull)
+  title          String
+  html           String        @db.Text
+  markdown       String?       @db.Text
+  excerpt        String?
+  tags           String[]      @default([])
+  heroImagePath  String?
+  status         BlogStatus    @default(drafted)
+  evalScore      Float?
+  evalData       Json?
+  citations      Json?
+  ghostPostId    String?
+  ghostUrl       String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  runs           Run[]
+}
+
+enum RunStatus {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+}
+
+enum RunKind {
+  generate
+  test
+}
+
+model Run {
+  id             String        @id @default(cuid())
+  kind           RunKind       @default(generate)
+  status         RunStatus     @default(queued)
+  model          String?
+  topicId        String?
+  topic          Topic?        @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  blogId         String?
+  blog           Blog?         @relation(fields: [blogId], references: [id], onDelete: SetNull)
+  skillVersionId String?
+  skillVersion   SkillVersion? @relation(fields: [skillVersionId], references: [id], onDelete: SetNull)
+  jobId          String?
+  input          Json?
+  result         Json?
+  error          String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  events         RunEvent[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model RunEvent {
+  id      String   @id @default(cuid())
+  runId   String
+  run     Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  seq     Int
+  ts      DateTime @default(now())
+  type    String
+  level   String   @default("info")
+  message String   @db.Text
+  data    Json?
+
+  @@unique([runId, seq])
+  @@index([runId])
+}

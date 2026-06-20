@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: flo-blog-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flo
+      POSTGRES_PASSWORD: flo
+      POSTGRES_DB: flo_blog
+    ports:
+      - "5432:5432"
+    volumes:
+      - flo_blog_pgdata:/var/lib/postgresql/data
+
+volumes:
+  flo_blog_pgdata:
