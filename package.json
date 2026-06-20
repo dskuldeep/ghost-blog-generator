@@ -22,6 +22,9 @@
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
+  "engines": {
+    "node": ">=20 <23"
+  },
   "dependencies": {
     "@google/genai": "^2.9.0",
     "@monaco-editor/react": "^4.7.0",

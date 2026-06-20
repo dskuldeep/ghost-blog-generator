@@ -95,12 +95,69 @@ prisma/schema.prisma Data model
 examples/            Sample .skill package
 ```
 
-## Deployment
+## Deploy to Railway
 
-Deploy to a **persistent Node host** (Railway, Render, Fly.io) rather than
-serverless — agentic runs take minutes and would exceed serverless time limits.
-Run the web process (`npm run start`) and the worker (`npm run worker`) against a
-managed Postgres. Set `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, and
-`SECRETS_KEY` (rotate the dev values). Hero images are written to
-`HERO_IMAGE_DIR`; mount a persistent volume there if you want them to survive
-restarts (they are also re-generatable on demand).
+The repo is preconfigured for Railway with a **persistent Node** setup (not
+serverless — agentic runs take minutes). You'll create **one Railway project**
+with **three components**: a Postgres database, a **web** service, and a
+**worker** service, both deployed from this same repo.
+
+Config files in the repo:
+
+- `railway.json` — web service: builds the app, runs DB migrations + seed in the
+  pre-deploy step (`npm run release`), starts `next start`, healthchecks `/login`.
+- `railway.worker.json` — worker service: generates the Prisma client and runs
+  `npm run worker:prod` (the graphile-worker job runner).
+- `prisma/migrations/` — baseline migration applied by `prisma migrate deploy`.
+
+### Steps
+
+1. **Create the project & database**
+   - New Project → **Deploy from GitHub repo** (this repo).
+   - **+ New → Database → PostgreSQL.**
+
+2. **Web service** (the service created from the repo) — auto-uses `railway.json`.
+   Set just **two** variables (Settings → Variables):
+     - `DATABASE_URL` → reference the Postgres var: `${{Postgres.DATABASE_URL}}`
+     - `SECRETS_KEY` → `openssl rand -base64 32` (**keep stable** — rotating it
+       makes stored Gemini/Ghost keys undecryptable)
+
+   Then **Networking → Generate Domain** for the public URL. Everything else has
+   safe defaults (see "Optional variables" below).
+
+3. **Worker service**
+   - **+ New → GitHub Repo →** select this same repo again.
+   - **Settings → Config-as-code / Railway Config File** → set the path to
+     `railway.worker.json`. (If you don't see that option, instead set the
+     service's **Build Command** to `npm run db:generate` and **Start Command**
+     to `npm run worker:prod`.)
+   - Set the **same `DATABASE_URL` and `SECRETS_KEY`** as the web service — the
+     worker needs `SECRETS_KEY` to decrypt the Gemini/Ghost keys.
+   - The worker has **no public domain** and no healthcheck — it's a background
+     process.
+
+4. **Deploy.** The web service's pre-deploy step runs `prisma migrate deploy`
+   (creates all tables) then seeds the first user (idempotent). Sign in at your
+   domain and finish setup in **Settings** (add the Gemini + Ghost keys there).
+
+### Optional variables (defaults shown)
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `AUTH_SECRET` | falls back to `SECRETS_KEY` | session/JWT signing |
+| `AUTH_URL` | inferred from request headers | set if you want it explicit |
+| `SEED_USER_EMAIL` | `admin@flo.finance` | first login email |
+| `SEED_USER_PASSWORD` | `changeme123` | **set this before first deploy** |
+| `SEED_USER_NAME` | `Admin` | display name |
+| `HERO_IMAGE_DIR` | `storage/hero-images` | set to `/app/storage/hero-images` + attach a Volume to persist hero PNGs across restarts (they're also re-generatable on demand) |
+
+### Notes
+
+- Both services build from the same repo; only the web service runs migrations
+  (the worker must not, to avoid races).
+- `next start` automatically binds to Railway's injected `PORT`.
+- `SECRETS_KEY` must be **identical** across web and worker and must not change,
+  or previously-encrypted secrets can't be read.
+
+Render and Fly.io work the same way (web + worker processes against managed
+Postgres); only the config-file format differs.

@@ -6,7 +6,11 @@ export const authConfig = {
     signIn: "/login",
   },
   session: { strategy: "jwt" },
+  // trustHost lets NextAuth infer the URL from request headers, so AUTH_URL is
+  // optional on Railway. AUTH_SECRET falls back to SECRETS_KEY so a single
+  // stable secret is enough to deploy.
   trustHost: true,
+  secret: process.env.AUTH_SECRET ?? process.env.SECRETS_KEY,
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
