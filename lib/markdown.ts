@@ -1,5 +1,6 @@
 import { marked } from "marked";
 import TurndownService from "turndown";
+import { gfm } from "turndown-plugin-gfm";
 
 marked.setOptions({ gfm: true, breaks: false });
 
@@ -12,6 +13,9 @@ function td(): TurndownService {
       bulletListMarker: "-",
       emDelimiter: "*",
     });
+    // Adds GFM support so HTML <table>/strikethrough/task lists convert to
+    // Markdown instead of being flattened into loose lines.
+    turndown.use(gfm);
   }
   return turndown;
 }

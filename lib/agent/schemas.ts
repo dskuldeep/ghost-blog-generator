@@ -35,7 +35,7 @@ export const DRAFT_SCHEMA = {
     html: {
       type: Type.STRING,
       description:
-        "The full blog body as clean semantic HTML (h2/h3, p, ul, ol, blockquote, a). No <html>/<head>/<body> wrappers, no inline styles.",
+        "The full blog body as clean semantic HTML (h2/h3, p, ul, ol, blockquote, a, and full table markup: table/thead/tbody/tr/th/td for comparisons). No <html>/<head>/<body> wrappers, no inline styles.",
     },
     excerpt: {
       type: Type.STRING,
