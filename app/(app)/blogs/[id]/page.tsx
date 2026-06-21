@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getBlog } from "@/lib/blogs";
+import { ensureMarkdown, getBlog } from "@/lib/blogs";
 import { getClientSettings } from "@/lib/settings";
 import { BlogEditor } from "./blog-editor";
 
@@ -13,6 +13,7 @@ export default async function BlogPage({
   const { id } = await params;
   const blog = await getBlog(id);
   if (!blog) notFound();
+  const markdown = await ensureMarkdown(id);
   const settings = await getClientSettings();
 
   return (
@@ -21,7 +22,7 @@ export default async function BlogPage({
       initial={{
         id: blog.id,
         title: blog.title,
-        html: blog.html,
+        markdown,
         excerpt: blog.excerpt,
         tags: blog.tags,
         status: blog.status,

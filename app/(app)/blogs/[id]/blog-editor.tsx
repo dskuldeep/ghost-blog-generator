@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { marked } from "marked";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Badge, StatusBadge } from "@/components/ui/badge";
@@ -20,7 +21,7 @@ interface EvalData {
 interface BlogData {
   id: string;
   title: string;
-  html: string;
+  markdown: string;
   excerpt: string | null;
   tags: string[];
   status: string;
@@ -41,11 +42,16 @@ export function BlogEditor({
   const toast = useToast();
 
   const [title, setTitle] = useState(initial.title);
-  const [html, setHtml] = useState(initial.html);
+  const [markdown, setMarkdown] = useState(initial.markdown);
   const [excerpt, setExcerpt] = useState(initial.excerpt ?? "");
   const [tags, setTags] = useState(initial.tags.join(", "));
   const [tab, setTab] = useState<"edit" | "preview">("preview");
   const [dirty, setDirty] = useState(false);
+
+  const previewHtml = useMemo(
+    () => marked.parse(markdown, { async: false }) as string,
+    [markdown],
+  );
 
   const [hasHero, setHasHero] = useState(initial.hasHero);
   const [heroV, setHeroV] = useState(0);
@@ -75,7 +81,7 @@ export function BlogEditor({
         method: "PATCH",
         body: JSON.stringify({
           title,
-          html,
+          markdown,
           excerpt,
           tags: tags
             .split(",")
@@ -210,7 +216,7 @@ export function BlogEditor({
                     : "text-[var(--color-muted)]"
                 }`}
               >
-                {t === "preview" ? "Preview" : "HTML"}
+                {t === "preview" ? "Preview" : "Markdown"}
               </button>
             ))}
           </div>
@@ -218,14 +224,14 @@ export function BlogEditor({
           {tab === "preview" ? (
             <div
               className="prose-blog rounded-lg border border-[var(--color-border)] bg-white p-6"
-              dangerouslySetInnerHTML={{ __html: html }}
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
             />
           ) : (
             <div className="h-[560px] overflow-hidden rounded-lg border border-[var(--color-border)]">
               <CodeEditor
-                path="content.html"
-                value={html}
-                onChange={mark(setHtml)}
+                path="content.md"
+                value={markdown}
+                onChange={mark(setMarkdown)}
               />
             </div>
           )}

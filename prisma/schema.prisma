@@ -110,6 +110,7 @@ model Blog {
   excerpt        String?
   tags           String[]      @default([])
   heroImagePath  String?
+  heroImage      Bytes?
   status         BlogStatus    @default(drafted)
   evalScore      Float?
   evalData       Json?

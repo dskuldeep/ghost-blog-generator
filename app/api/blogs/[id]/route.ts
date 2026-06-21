@@ -27,6 +27,7 @@ export const GET = route(async (_req: Request, ctx: Ctx) => {
 
 const patchSchema = z.object({
   title: z.string().min(1).optional(),
+  markdown: z.string().optional(),
   html: z.string().optional(),
   excerpt: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),

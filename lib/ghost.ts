@@ -39,6 +39,8 @@ export interface PublishInput {
   tags?: string[];
   heroImagePath?: string | null;
   status?: "draft" | "published";
+  /** When set, update this existing Ghost post instead of creating a new one. */
+  ghostPostId?: string | null;
 }
 
 export interface PublishResult {
@@ -60,17 +62,46 @@ export async function publishToGhost(
     featureImage = uploaded.url;
   }
 
-  const post = await api.posts.add(
-    {
-      title: input.title,
-      html: input.html,
-      custom_excerpt: input.excerpt ?? undefined,
-      tags: input.tags?.length ? input.tags.map((t) => ({ name: t })) : undefined,
-      feature_image: featureImage,
-      status: input.status ?? "draft",
-    } as Record<string, unknown>,
-    { source: "html" },
-  );
+  const fields: Record<string, unknown> = {
+    title: input.title,
+    html: input.html,
+    custom_excerpt: input.excerpt ?? undefined,
+    tags: input.tags?.length ? input.tags.map((t) => ({ name: t })) : undefined,
+    feature_image: featureImage,
+    status: input.status ?? "draft",
+  };
+
+  // Update an existing post in place when we already pushed it once.
+  if (input.ghostPostId) {
+    let existing: { updated_at?: string } | null = null;
+    try {
+      existing = (await api.posts.read({ id: input.ghostPostId })) as unknown as {
+        updated_at?: string;
+      };
+    } catch {
+      existing = null; // post was deleted on Ghost — fall through to create.
+    }
+    if (existing) {
+      const post = await api.posts.edit(
+        {
+          id: input.ghostPostId,
+          // Ghost requires the current updated_at for collision detection.
+          updated_at: existing.updated_at,
+          ...fields,
+        } as never,
+        { source: "html" },
+      );
+      return {
+        id: post.id,
+        url: post.url ?? `${url.replace(/\/$/, "")}/`,
+        status: post.status ?? "draft",
+      };
+    }
+  }
+
+  const post = await api.posts.add(fields as Record<string, unknown>, {
+    source: "html",
+  });
 
   return {
     id: post.id,

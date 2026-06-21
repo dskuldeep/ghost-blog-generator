@@ -1,15 +1,13 @@
 import { route, json, ApiError } from "@/lib/api";
-import { getBlog, regenerateHero } from "@/lib/blogs";
-import { readHero } from "@/lib/image/store";
+import { getHeroImage, regenerateHero } from "@/lib/blogs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// Serve the current hero image.
+// Serve the current hero image from the DB.
 export const GET = route(async (_req: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
-  const blog = await getBlog(id);
-  if (!blog?.heroImagePath) throw new ApiError(404, "No hero image");
-  const buf = await readHero(blog.heroImagePath);
+  const buf = await getHeroImage(id);
+  if (!buf) throw new ApiError(404, "No hero image");
   return new Response(new Uint8Array(buf), {
     headers: {
       "Content-Type": "image/png",

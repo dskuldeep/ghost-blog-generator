@@ -1,23 +1,15 @@
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdtemp, writeFile } from "fs/promises";
+import { tmpdir } from "os";
 import path from "path";
 
-function heroDir(): string {
-  const dir = process.env.HERO_IMAGE_DIR || "storage/hero-images";
-  return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
-}
-
-export function heroPathFor(blogId: string): string {
-  return path.join(heroDir(), `${blogId}.png`);
-}
-
-export async function writeHero(blogId: string, buffer: Buffer): Promise<string> {
-  const dir = heroDir();
-  await mkdir(dir, { recursive: true });
-  const filePath = heroPathFor(blogId);
-  await writeFile(filePath, buffer);
+/**
+ * Hero images are stored as bytes in the DB (shared across the web + worker
+ * containers). For uploads that require a file path (e.g. the Ghost Admin API),
+ * spill the bytes to a temp file and return its path.
+ */
+export async function heroTempFile(blogId: string, bytes: Buffer): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "flo-hero-"));
+  const filePath = path.join(dir, `${blogId}.png`);
+  await writeFile(filePath, bytes);
   return filePath;
-}
-
-export async function readHero(filePath: string): Promise<Buffer> {
-  return readFile(filePath);
 }

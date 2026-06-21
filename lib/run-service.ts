@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { getResolvedSettings } from "@/lib/settings";
 import { runAgent } from "@/lib/agent/orchestrator";
+import { regenerateHero } from "@/lib/blogs";
+import { htmlToMarkdown } from "@/lib/markdown";
 import { enqueueJob, GENERATE_BLOG } from "@/lib/queue";
 import type { AgentEvent } from "@/lib/agent/types";
 import type { Prisma } from "@prisma/client";
@@ -123,6 +125,7 @@ export async function executeRun(runId: string) {
         skillVersionId: version.id,
         title: result.title,
         html: result.html,
+        markdown: htmlToMarkdown(result.html),
         excerpt: result.excerpt,
         tags: result.tags,
         status: "drafted",
@@ -131,6 +134,25 @@ export async function executeRun(runId: string) {
         citations: result.citations as unknown as Prisma.InputJsonValue,
       },
     });
+
+    // Auto-generate the hero image (non-fatal: a failure shouldn't fail the run).
+    try {
+      await emit({ type: "stage", message: "Generating hero image…" });
+      await regenerateHero(blog.id);
+      await emit({
+        type: "stage",
+        level: "success",
+        message: "Hero image generated.",
+      });
+    } catch (heroErr) {
+      await emit({
+        type: "stage",
+        level: "warn",
+        message: `Hero image generation failed: ${
+          heroErr instanceof Error ? heroErr.message : "error"
+        }`,
+      });
+    }
 
     await db.run.update({
       where: { id: runId },

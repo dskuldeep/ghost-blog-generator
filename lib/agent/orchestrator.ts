@@ -135,7 +135,6 @@ export async function runAgent(
       prompt: evalPrompt(topic.title, html, citations.length > 0),
       schema: EVAL_SCHEMA,
       temperature: 0.2,
-      maxOutputTokens: 4096,
     });
   }
 
