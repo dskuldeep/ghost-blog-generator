@@ -5,9 +5,9 @@ import { getClientSettings, updateSettings } from "@/lib/settings";
 export const GET = route(async () => json(await getClientSettings()));
 
 const heroStyleSchema = z.object({
-  palette: z.enum(["indigo", "slate", "emerald", "rose", "amber"]),
-  font: z.enum(["sans", "serif"]),
   brand: z.string().max(60).optional(),
+  generateBackground: z.boolean().optional(),
+  imageModel: z.string().min(1).max(80).optional(),
 });
 
 const updateSchema = z.object({

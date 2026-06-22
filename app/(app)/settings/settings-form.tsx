@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Select } from "@/components/ui/input";
+import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { apiFetch } from "@/lib/client";
@@ -25,7 +25,11 @@ interface ClientSettings {
   ghostApiUrl: string;
   ghostAdminKeySet: boolean;
   ghostAdminKeyMasked: string;
-  heroStyle: { palette: string; font: string; brand?: string };
+  heroStyle: {
+    brand?: string;
+    generateBackground?: boolean;
+    imageModel?: string;
+  };
 }
 
 type TestState = { ok: boolean; message: string } | null;
@@ -54,9 +58,13 @@ export function SettingsForm({
   );
   const [evalThreshold, setEvalThreshold] = useState(initial.evalThreshold);
   const [ghostUrl, setGhostUrl] = useState(initial.ghostApiUrl);
-  const [palette, setPalette] = useState(initial.heroStyle.palette);
-  const [font, setFont] = useState(initial.heroStyle.font);
   const [brand, setBrand] = useState(initial.heroStyle.brand ?? "");
+  const [generateBackground, setGenerateBackground] = useState(
+    initial.heroStyle.generateBackground !== false,
+  );
+  const [imageModel, setImageModel] = useState(
+    initial.heroStyle.imageModel ?? "gemini-3.1-flash-image-preview",
+  );
 
   const [geminiSet, setGeminiSet] = useState(initial.geminiApiKeySet);
   const [ghostSet, setGhostSet] = useState(initial.ghostAdminKeySet);
@@ -76,7 +84,7 @@ export function SettingsForm({
         maxReviseIterations: Number(maxReviseIterations),
         evalThreshold: Number(evalThreshold),
         ghostApiUrl: ghostUrl,
-        heroStyle: { palette, font, brand },
+        heroStyle: { brand, generateBackground, imageModel },
       };
       if (geminiKey) payload.geminiApiKey = geminiKey;
       if (ghostKey) payload.ghostAdminKey = ghostKey;
@@ -319,48 +327,54 @@ export function SettingsForm({
         </CardContent>
       </Card>
 
-      {/* Hero style */}
+      {/* Hero image */}
       <Card>
         <CardHeader>
-          <CardTitle>Hero image style</CardTitle>
+          <CardTitle>Hero image</CardTitle>
           <CardDescription>
-            Minimal, modern hero images rendered for each post.
+            A topic-relevant isometric line-art background is generated with the
+            image model, then the Flo logo and the post title are composited on
+            top. Disable to use a plain branded cover.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="palette">Palette</Label>
-            <Select
-              id="palette"
-              value={palette}
-              onChange={(e) => setPalette(e.target.value)}
-            >
-              {["indigo", "slate", "emerald", "rose", "amber"].map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="font">Font</Label>
-            <Select
-              id="font"
-              value={font}
-              onChange={(e) => setFont(e.target.value)}
-            >
-              <option value="sans">Sans</option>
-              <option value="serif">Serif</option>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="brand">Brand label (optional)</Label>
-            <Input
-              id="brand"
-              placeholder="flo.finance"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
+        <CardContent className="space-y-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={generateBackground}
+              onChange={(e) => setGenerateBackground(e.target.checked)}
+              className="h-4 w-4"
             />
+            Generate an AI background image for each post
+          </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="imageModel">Image model</Label>
+              <Input
+                id="imageModel"
+                list="image-models"
+                value={imageModel}
+                onChange={(e) => setImageModel(e.target.value)}
+                disabled={!generateBackground}
+              />
+              <datalist id="image-models">
+                <option value="gemini-3.1-flash-image-preview" />
+                <option value="gemini-3-pro-image-preview" />
+                <option value="gemini-2.5-flash-image" />
+              </datalist>
+              <p className="text-xs text-[var(--color-muted)]">
+                Default: gemini-3.1-flash-image-preview (Nano Banana 2).
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="brand">Footer label (optional)</Label>
+              <Input
+                id="brand"
+                placeholder="flo.finance"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

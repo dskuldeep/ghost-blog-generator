@@ -2,15 +2,21 @@ import { db } from "@/lib/db";
 import { decrypt, encrypt, maskSecret } from "@/lib/crypto";
 
 export interface HeroStyle {
-  palette: "indigo" | "slate" | "emerald" | "rose" | "amber";
-  font: "sans" | "serif";
+  /** Footer wordmark label (defaults to "flo.finance"). */
   brand?: string;
+  /** Generate a topic-relevant AI line-art background behind the title. */
+  generateBackground?: boolean;
+  /** Image model (Nano Banana 2 by default) used for the background. */
+  imageModel?: string;
+  // Legacy fields kept for backward compatibility with stored settings.
+  palette?: "indigo" | "slate" | "emerald" | "rose" | "amber";
+  font?: "sans" | "serif";
 }
 
 export const DEFAULT_HERO_STYLE: HeroStyle = {
-  palette: "indigo",
-  font: "sans",
   brand: "",
+  generateBackground: true,
+  imageModel: "gemini-3.1-flash-image-preview",
 };
 
 export interface ResolvedSettings {

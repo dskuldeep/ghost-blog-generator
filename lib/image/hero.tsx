@@ -1,16 +1,22 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { ImageResponse } from "next/og";
+import sharp from "sharp";
 import type { HeroStyle } from "@/lib/settings";
 
 // Flo brand palette (matches the marketing og-image).
 const BG = "#fdf8ec"; // warm cream
-const INK = "#14142b"; // near-black navy for the wordmark
+const INK = "#14142b"; // near-black navy for the wordmark + title
 const PERIWINKLE = "#97a6f0"; // dot + footer
 const BAR = "#aab4f4"; // bottom accent bar
-const SUBTLE = "#6e7390"; // muted slate for the title/subtitle
+const SUBTLE = "#6e7390"; // muted slate (used when there is no background)
 
-let fontCache: { name: string; data: Buffer; weight: number; style: "normal" }[] | null = null;
+const WIDTH = 1200;
+const HEIGHT = 630;
+
+let fontCache:
+  | { name: string; data: Buffer; weight: number; style: "normal" }[]
+  | null = null;
 
 async function loadFonts() {
   if (fontCache) return fontCache;
@@ -31,26 +37,32 @@ async function loadFonts() {
 }
 
 function titleFontSize(len: number): number {
-  if (len < 40) return 52;
-  if (len < 70) return 46;
-  if (len < 110) return 40;
-  return 34;
+  if (len < 40) return 60;
+  if (len < 70) return 52;
+  if (len < 110) return 44;
+  return 36;
 }
 
 /**
- * Render the Flo-branded hero image (1200×630) as PNG bytes:
- * big "Flo." wordmark, the blog title as a subtitle, a monospace
- * "flo.finance" footer, and a periwinkle accent bar along the bottom.
+ * Render the Flo-branded hero image (1200×630) as PNG bytes.
+ *
+ * The text + scrim layer is rendered with Satori (next/og) on a transparent
+ * canvas, then composited over the AI-generated line-art background with sharp.
+ * (Satori can't reliably decode raster images, so we don't hand it the bg.)
+ * When no background is supplied, a clean cream design is returned.
  */
 export async function renderHeroPng(opts: {
   title: string;
   style?: HeroStyle;
+  background?: Buffer | null;
 }): Promise<Buffer> {
   const fonts = await loadFonts();
   const title = opts.title.trim().slice(0, 160);
   const footer = opts.style?.brand?.trim() || "flo.finance";
+  const hasBg = !!opts.background;
+  const titleColor = hasBg ? INK : SUBTLE;
 
-  const image = new ImageResponse(
+  const overlay = new ImageResponse(
     (
       <div
         style={{
@@ -58,21 +70,50 @@ export async function renderHeroPng(opts: {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "center",
-          background: BG,
+          justifyContent: "space-between",
+          background: hasBg ? "transparent" : BG,
           fontFamily: "Inter",
-          padding: "0 100px",
+          padding: "76px 80px 110px 80px",
           position: "relative",
         }}
       >
+        {/* Legibility scrim (only over a background). */}
+        {hasBg && (
+          <>
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: WIDTH,
+                height: HEIGHT,
+                display: "flex",
+                background: "rgba(253,248,236,0.12)",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: WIDTH,
+                height: HEIGHT,
+                display: "flex",
+                background:
+                  "linear-gradient(90deg, rgba(253,248,236,0.96) 0%, rgba(253,248,236,0.93) 36%, rgba(253,248,236,0.5) 52%, rgba(253,248,236,0) 66%)",
+              }}
+            />
+          </>
+        )}
+
         {/* Wordmark: "Flo" + periwinkle dot */}
         <div style={{ display: "flex", alignItems: "flex-end" }}>
           <div
             style={{
-              fontSize: 150,
+              fontSize: 96,
               fontWeight: 800,
               color: INK,
-              letterSpacing: -6,
+              letterSpacing: -4,
               lineHeight: 1,
             }}
           >
@@ -80,26 +121,25 @@ export async function renderHeroPng(opts: {
           </div>
           <div
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 40,
+              width: 26,
+              height: 26,
+              borderRadius: 26,
               background: PERIWINKLE,
-              marginLeft: 6,
-              marginBottom: 14,
+              marginLeft: 5,
+              marginBottom: 10,
             }}
           />
         </div>
 
-        {/* Title / subtitle */}
+        {/* Title (the focus) */}
         <div
           style={{
             display: "flex",
-            marginTop: 28,
-            maxWidth: 940,
+            maxWidth: 560,
             fontSize: titleFontSize(title.length),
-            fontWeight: 500,
-            color: SUBTLE,
-            lineHeight: 1.25,
+            fontWeight: 700,
+            color: titleColor,
+            lineHeight: 1.18,
             letterSpacing: -0.5,
           }}
         >
@@ -110,8 +150,8 @@ export async function renderHeroPng(opts: {
         <div
           style={{
             position: "absolute",
-            left: 100,
-            bottom: 56,
+            left: 80,
+            bottom: 52,
             display: "flex",
             fontFamily: "JetBrains Mono",
             fontWeight: 700,
@@ -131,13 +171,21 @@ export async function renderHeroPng(opts: {
             right: 0,
             bottom: 0,
             height: 12,
+            display: "flex",
             background: BAR,
           }}
         />
       </div>
     ) as never,
-    { width: 1200, height: 630, fonts: fonts as never },
+    { width: WIDTH, height: HEIGHT, fonts: fonts as never },
   );
 
-  return Buffer.from(await image.arrayBuffer());
+  const overlayPng = Buffer.from(await overlay.arrayBuffer());
+  if (!opts.background) return overlayPng;
+
+  // Cover-fit the AI background to the canvas, then composite the overlay on top.
+  const bgPng = await sharp(opts.background)
+    .resize(WIDTH, HEIGHT, { fit: "cover" })
+    .toBuffer();
+  return sharp(bgPng).composite([{ input: overlayPng }]).png().toBuffer();
 }

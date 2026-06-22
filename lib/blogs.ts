@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getResolvedSettings } from "@/lib/settings";
 import { publishToGhost } from "@/lib/ghost";
+import { generateHeroBackground } from "@/lib/agent/image-gen";
 import { renderHeroPng } from "@/lib/image/hero";
 import { heroTempFile } from "@/lib/image/store";
 import { htmlToMarkdown, markdownToHtml } from "@/lib/markdown";
@@ -74,11 +75,25 @@ export async function updateBlog(
 export async function regenerateHero(id: string): Promise<void> {
   const blog = await db.blog.findUnique({
     where: { id },
-    select: { id: true, title: true },
+    select: { id: true, title: true, topic: { select: { brief: true } } },
   });
   if (!blog) throw new Error("Blog not found");
   const settings = await getResolvedSettings();
-  const png = await renderHeroPng({ title: blog.title, style: settings.heroStyle });
+  const style = settings.heroStyle;
+
+  // Generate a topic-relevant, text-free line-art background with Nano Banana 2.
+  // Falls back to the plain cream design if disabled, unkeyed, or it fails.
+  let background: Buffer | null = null;
+  if (style.generateBackground !== false && settings.geminiApiKey) {
+    background = await generateHeroBackground({
+      apiKey: settings.geminiApiKey,
+      model: style.imageModel,
+      title: blog.title,
+      brief: blog.topic?.brief ?? null,
+    });
+  }
+
+  const png = await renderHeroPng({ title: blog.title, style, background });
   await db.blog.update({
     where: { id },
     // heroImagePath doubles as a lightweight "has hero" marker for list queries.
