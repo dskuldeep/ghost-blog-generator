@@ -77,35 +77,6 @@ export async function renderHeroPng(opts: {
           position: "relative",
         }}
       >
-        {/* Legibility scrim (only over a background). */}
-        {hasBg && (
-          <>
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: WIDTH,
-                height: HEIGHT,
-                display: "flex",
-                background: "rgba(253,248,236,0.12)",
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: WIDTH,
-                height: HEIGHT,
-                display: "flex",
-                background:
-                  "linear-gradient(90deg, rgba(253,248,236,0.96) 0%, rgba(253,248,236,0.93) 36%, rgba(253,248,236,0.5) 52%, rgba(253,248,236,0) 66%)",
-              }}
-            />
-          </>
-        )}
-
         {/* Wordmark: "Flo" + periwinkle dot */}
         <div style={{ display: "flex", alignItems: "flex-end" }}>
           <div
@@ -183,9 +154,33 @@ export async function renderHeroPng(opts: {
   const overlayPng = Buffer.from(await overlay.arrayBuffer());
   if (!opts.background) return overlayPng;
 
-  // Cover-fit the AI background to the canvas, then composite the overlay on top.
+  // Cover-fit the AI background, lay the full-bleed legibility scrim over it,
+  // then the text overlay. The scrim is rendered with sharp (not Satori) so it
+  // covers the entire canvas — Satori clips absolutely-positioned children to
+  // the padded content box, which left a hard seam near the edges.
   const bgPng = await sharp(opts.background)
     .resize(WIDTH, HEIGHT, { fit: "cover" })
     .toBuffer();
-  return sharp(bgPng).composite([{ input: overlayPng }]).png().toBuffer();
+  const scrimPng = await sharp(Buffer.from(scrimSvg())).png().toBuffer();
+  return sharp(bgPng)
+    .composite([{ input: scrimPng }, { input: overlayPng }])
+    .png()
+    .toBuffer();
+}
+
+/** Full-canvas legibility scrim: a light global wash + a left-weighted cream
+ *  gradient that keeps the title crisp while the art shows toward the right. */
+function scrimSvg(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="#fdf8ec" fill-opacity="0.12"/>
+  <defs>
+    <linearGradient id="scrim" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#fdf8ec" stop-opacity="0.96"/>
+      <stop offset="36%" stop-color="#fdf8ec" stop-opacity="0.93"/>
+      <stop offset="52%" stop-color="#fdf8ec" stop-opacity="0.5"/>
+      <stop offset="66%" stop-color="#fdf8ec" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#scrim)"/>
+</svg>`;
 }
