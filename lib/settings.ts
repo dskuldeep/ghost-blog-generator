@@ -19,6 +19,21 @@ export const DEFAULT_HERO_STYLE: HeroStyle = {
   imageModel: "gemini-3.1-flash-image-preview",
 };
 
+export interface BodyImageStyle {
+  /** Toggle in-body illustrations on/off. */
+  enabled?: boolean;
+  /** Image model (Nano Banana 2 by default) used for the render step. */
+  imageModel?: string;
+  /** Target illustrations per post (clamped 1–4). */
+  count?: number;
+}
+
+export const DEFAULT_BODY_IMAGE_STYLE: BodyImageStyle = {
+  enabled: true,
+  imageModel: "gemini-3.1-flash-image-preview",
+  count: 3,
+};
+
 export interface ResolvedSettings {
   geminiApiKey: string | null;
   geminiModel: string;
@@ -29,6 +44,7 @@ export interface ResolvedSettings {
   ghostApiUrl: string | null;
   ghostAdminKey: string | null;
   heroStyle: HeroStyle;
+  bodyImageStyle: BodyImageStyle;
 }
 
 /** Ensure the singleton settings row exists and return the raw record. */
@@ -53,6 +69,10 @@ export async function getResolvedSettings(): Promise<ResolvedSettings> {
     ghostApiUrl: s.ghostApiUrl,
     ghostAdminKey: decrypt(s.ghostAdminKeyEnc),
     heroStyle: { ...DEFAULT_HERO_STYLE, ...((s.heroStyle as object) ?? {}) },
+    bodyImageStyle: {
+      ...DEFAULT_BODY_IMAGE_STYLE,
+      ...((s.bodyImageStyle as object) ?? {}),
+    },
   };
 }
 
@@ -71,6 +91,10 @@ export async function getClientSettings() {
     ghostAdminKeySet: !!s.ghostAdminKeyEnc,
     ghostAdminKeyMasked: maskSecret(decrypt(s.ghostAdminKeyEnc) ?? ""),
     heroStyle: { ...DEFAULT_HERO_STYLE, ...((s.heroStyle as object) ?? {}) },
+    bodyImageStyle: {
+      ...DEFAULT_BODY_IMAGE_STYLE,
+      ...((s.bodyImageStyle as object) ?? {}),
+    },
   };
 }
 
@@ -84,6 +108,7 @@ export interface UpdateSettingsInput {
   ghostApiUrl?: string;
   ghostAdminKey?: string; // plaintext; "" clears, undefined leaves unchanged
   heroStyle?: HeroStyle;
+  bodyImageStyle?: BodyImageStyle;
 }
 
 export async function updateSettings(input: UpdateSettingsInput) {
@@ -101,6 +126,8 @@ export async function updateSettings(input: UpdateSettingsInput) {
   if (input.ghostApiUrl !== undefined)
     data.ghostApiUrl = input.ghostApiUrl || null;
   if (input.heroStyle !== undefined) data.heroStyle = input.heroStyle;
+  if (input.bodyImageStyle !== undefined)
+    data.bodyImageStyle = input.bodyImageStyle;
 
   // Secrets: only touch when a non-undefined value is provided.
   if (input.geminiApiKey !== undefined) {

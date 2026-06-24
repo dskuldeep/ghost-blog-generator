@@ -32,6 +32,17 @@ export async function testGhost(
   }
 }
 
+/** Upload a single image file to Ghost and return its hosted URL. */
+export async function uploadImageToGhost(
+  url: string,
+  key: string,
+  filePath: string,
+): Promise<string> {
+  const api = getGhostClient(url, key);
+  const uploaded = await api.images.upload({ file: filePath });
+  return uploaded.url;
+}
+
 export interface PublishInput {
   title: string;
   html: string;

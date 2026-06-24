@@ -13,3 +13,15 @@ export async function heroTempFile(blogId: string, bytes: Buffer): Promise<strin
   await writeFile(filePath, bytes);
   return filePath;
 }
+
+/** Spill a body-image's WebP bytes to a temp file for upload to Ghost. */
+export async function bodyImageTempFile(
+  blogId: string,
+  idx: number,
+  bytes: Buffer,
+): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "flo-body-"));
+  const filePath = path.join(dir, `${blogId}-${idx}.webp`);
+  await writeFile(filePath, bytes);
+  return filePath;
+}

@@ -30,6 +30,7 @@ model Settings {
   ghostApiUrl        String?
   ghostAdminKeyEnc   String?
   heroStyle          Json?
+  bodyImageStyle     Json?
   updatedAt          DateTime @updatedAt @default(now())
 }
 
@@ -120,6 +121,25 @@ model Blog {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   runs           Run[]
+  images         BlogImage[]
+}
+
+// In-body illustrations for a post. Bytes live in Postgres (shared across the
+// web + worker containers); referenced from the markdown by a local API URL.
+model BlogImage {
+  id        String   @id @default(cuid())
+  blogId    String
+  blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  idx       Int
+  prompt    String   @db.Text
+  alt       String
+  data      Bytes
+  mimeType  String   @default("image/webp")
+  ghostUrl  String?
+  createdAt DateTime @default(now())
+
+  @@unique([blogId, idx])
+  @@index([blogId])
 }
 
 enum RunStatus {

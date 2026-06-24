@@ -46,6 +46,36 @@ export const DRAFT_SCHEMA = {
   required: ["title", "html", "excerpt", "tags"],
 };
 
+export const IMAGE_PLAN_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    images: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          prompt: {
+            type: Type.STRING,
+            description:
+              "A vivid description of a SINGLE flat line-art illustration that represents this section's idea — objects and composition only, never any text, letters, numbers, or logos.",
+          },
+          alt: {
+            type: Type.STRING,
+            description: "Concise accessible alt text (max 120 chars).",
+          },
+          afterHeading: {
+            type: Type.STRING,
+            description:
+              "The exact '## ' heading text this image should sit under (no leading '#').",
+          },
+        },
+        required: ["prompt", "alt", "afterHeading"],
+      },
+    },
+  },
+  required: ["images"],
+};
+
 export const EVAL_SCHEMA = {
   type: Type.OBJECT,
   properties: {

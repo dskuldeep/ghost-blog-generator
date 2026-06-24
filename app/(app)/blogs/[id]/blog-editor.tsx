@@ -56,6 +56,7 @@ export function BlogEditor({
   const [hasHero, setHasHero] = useState(initial.hasHero);
   const [heroV, setHeroV] = useState(0);
   const [genningHero, setGenningHero] = useState(false);
+  const [genningBody, setGenningBody] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -110,6 +111,31 @@ export function BlogEditor({
       toast((e as Error).message, "error");
     } finally {
       setGenningHero(false);
+    }
+  }
+
+  async function generateBodyImages() {
+    setGenningBody(true);
+    try {
+      // Regeneration works off the saved markdown, so flush edits first.
+      if (dirty) await save();
+      const res = await apiFetch<{ count: number; markdown: string }>(
+        `/api/blogs/${initial.id}/images`,
+        { method: "POST" },
+      );
+      setMarkdown(res.markdown);
+      setDirty(false);
+      toast(
+        res.count > 0
+          ? `Generated ${res.count} body image${res.count === 1 ? "" : "s"}.`
+          : "No body images were added.",
+        res.count > 0 ? "success" : "error",
+      );
+      router.refresh();
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setGenningBody(false);
     }
   }
 
@@ -267,6 +293,24 @@ export function BlogEditor({
             </Button>
             <p className="text-xs text-[var(--color-muted)]">
               Style is configured in Settings → Hero image style.
+            </p>
+          </div>
+
+          {/* Body images */}
+          <div className="space-y-2">
+            <Label>Body images</Label>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={generateBodyImages}
+              loading={genningBody}
+            >
+              Regenerate body images
+            </Button>
+            <p className="text-xs text-[var(--color-muted)]">
+              Plans on-topic line-art and injects it under the post&apos;s
+              sections. Configured in Settings → Body images.
             </p>
           </div>
 

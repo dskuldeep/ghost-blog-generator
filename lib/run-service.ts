@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getResolvedSettings } from "@/lib/settings";
 import { runAgent } from "@/lib/agent/orchestrator";
-import { regenerateHero } from "@/lib/blogs";
+import { regenerateBodyImages, regenerateHero } from "@/lib/blogs";
 import { htmlToMarkdown } from "@/lib/markdown";
 import { enqueueJob, GENERATE_BLOG } from "@/lib/queue";
 import type { AgentEvent } from "@/lib/agent/types";
@@ -150,6 +150,25 @@ export async function executeRun(runId: string) {
         level: "warn",
         message: `Hero image generation failed: ${
           heroErr instanceof Error ? heroErr.message : "error"
+        }`,
+      });
+    }
+
+    // Auto-generate in-body illustrations (best-effort; never fails the run).
+    try {
+      await emit({ type: "stage", message: "Generating body images…" });
+      const n = await regenerateBodyImages(blog.id);
+      await emit({
+        type: "stage",
+        level: "success",
+        message: n > 0 ? `Generated ${n} body image(s).` : "No body images added.",
+      });
+    } catch (bodyErr) {
+      await emit({
+        type: "stage",
+        level: "warn",
+        message: `Body image generation failed: ${
+          bodyErr instanceof Error ? bodyErr.message : "error"
         }`,
       });
     }

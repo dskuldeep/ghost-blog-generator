@@ -4,7 +4,9 @@ import { getGeminiClient } from "@/lib/gemini";
 export const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 
 // Flo brand palette, handed to the image model so the art matches the site.
-const BRAND_PROMPT_PALETTE =
+// Exported so the body-image generator renders on the SAME palette as the hero,
+// keeping the cover and the in-body art as one visual set.
+export const BRAND_PROMPT_PALETTE =
   "warm cream/ivory background (#fdf8ec), deep near-black navy ink lines (#14142b), " +
   "soft periwinkle/indigo accents (#97a6f0 and #aab4f4), with restrained use of a single " +
   "muted slate tone for depth";

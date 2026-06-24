@@ -30,6 +30,11 @@ interface ClientSettings {
     generateBackground?: boolean;
     imageModel?: string;
   };
+  bodyImageStyle: {
+    enabled?: boolean;
+    imageModel?: string;
+    count?: number;
+  };
 }
 
 type TestState = { ok: boolean; message: string } | null;
@@ -65,6 +70,13 @@ export function SettingsForm({
   const [imageModel, setImageModel] = useState(
     initial.heroStyle.imageModel ?? "gemini-3.1-flash-image-preview",
   );
+  const [bodyEnabled, setBodyEnabled] = useState(
+    initial.bodyImageStyle.enabled !== false,
+  );
+  const [bodyImageModel, setBodyImageModel] = useState(
+    initial.bodyImageStyle.imageModel ?? "gemini-3.1-flash-image-preview",
+  );
+  const [bodyCount, setBodyCount] = useState(initial.bodyImageStyle.count ?? 3);
 
   const [geminiSet, setGeminiSet] = useState(initial.geminiApiKeySet);
   const [ghostSet, setGhostSet] = useState(initial.ghostAdminKeySet);
@@ -85,6 +97,11 @@ export function SettingsForm({
         evalThreshold: Number(evalThreshold),
         ghostApiUrl: ghostUrl,
         heroStyle: { brand, generateBackground, imageModel },
+        bodyImageStyle: {
+          enabled: bodyEnabled,
+          imageModel: bodyImageModel,
+          count: Number(bodyCount),
+        },
       };
       if (geminiKey) payload.geminiApiKey = geminiKey;
       if (ghostKey) payload.ghostAdminKey = ghostKey;
@@ -373,6 +390,57 @@ export function SettingsForm({
                 placeholder="flo.finance"
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Body images */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Body images</CardTitle>
+          <CardDescription>
+            On-topic flat line-art illustrations placed inline under the post&apos;s
+            sections. An &quot;art director&quot; (the writer model) decides what to draw
+            and where; the image model renders each on the same brand palette as
+            the hero. Disable to publish posts without in-body art.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={bodyEnabled}
+              onChange={(e) => setBodyEnabled(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Generate in-body illustrations for each post
+          </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="bodyImageModel">Image model</Label>
+              <Input
+                id="bodyImageModel"
+                list="image-models"
+                value={bodyImageModel}
+                onChange={(e) => setBodyImageModel(e.target.value)}
+                disabled={!bodyEnabled}
+              />
+              <p className="text-xs text-[var(--color-muted)]">
+                Default: gemini-3.1-flash-image-preview (Nano Banana 2).
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bodyCount">Images per post (1–4)</Label>
+              <Input
+                id="bodyCount"
+                type="number"
+                min="1"
+                max="4"
+                value={bodyCount}
+                onChange={(e) => setBodyCount(Number(e.target.value))}
+                disabled={!bodyEnabled}
               />
             </div>
           </div>

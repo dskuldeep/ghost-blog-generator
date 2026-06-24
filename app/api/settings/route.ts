@@ -10,6 +10,12 @@ const heroStyleSchema = z.object({
   imageModel: z.string().min(1).max(80).optional(),
 });
 
+const bodyImageStyleSchema = z.object({
+  enabled: z.boolean().optional(),
+  imageModel: z.string().min(1).max(80).optional(),
+  count: z.number().int().min(1).max(4).optional(),
+});
+
 const updateSchema = z.object({
   geminiApiKey: z.string().optional(),
   geminiModel: z.string().min(1).max(80).optional(),
@@ -20,6 +26,7 @@ const updateSchema = z.object({
   ghostApiUrl: z.string().url().or(z.literal("")).optional(),
   ghostAdminKey: z.string().optional(),
   heroStyle: heroStyleSchema.optional(),
+  bodyImageStyle: bodyImageStyleSchema.optional(),
 });
 
 export const PUT = route(async (req: Request) => {

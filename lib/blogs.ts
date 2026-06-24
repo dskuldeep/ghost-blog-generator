@@ -1,9 +1,18 @@
 import { db } from "@/lib/db";
 import { getResolvedSettings } from "@/lib/settings";
-import { publishToGhost } from "@/lib/ghost";
+import { publishToGhost, uploadImageToGhost } from "@/lib/ghost";
 import { generateHeroBackground } from "@/lib/agent/image-gen";
+import { getGeminiClient } from "@/lib/gemini";
+import {
+  compressIllustration,
+  generateBodyIllustration,
+  localImageUrl,
+  placeImagesInMarkdown,
+  planBodyImages,
+  stripBodyImages,
+} from "@/lib/agent/body-images";
 import { renderHeroPng } from "@/lib/image/hero";
-import { heroTempFile } from "@/lib/image/store";
+import { bodyImageTempFile, heroTempFile } from "@/lib/image/store";
 import { htmlToMarkdown, markdownToHtml } from "@/lib/markdown";
 
 export async function listBlogs() {
@@ -101,6 +110,174 @@ export async function regenerateHero(id: string): Promise<void> {
   });
 }
 
+/** List body-image metadata for a blog (no bytes). */
+export async function listBodyImages(id: string) {
+  return db.blogImage.findMany({
+    where: { blogId: id },
+    orderBy: { idx: "asc" },
+    select: { idx: true, alt: true, prompt: true, mimeType: true, ghostUrl: true },
+  });
+}
+
+/** The raw bytes + mime type for one body image, or null if none. */
+export async function getBodyImage(
+  id: string,
+  idx: number,
+): Promise<{ data: Buffer; mimeType: string } | null> {
+  const row = await db.blogImage.findUnique({
+    where: { blogId_idx: { blogId: id, idx } },
+    select: { data: true, mimeType: true },
+  });
+  if (!row?.data) return null;
+  return { data: Buffer.from(row.data), mimeType: row.mimeType };
+}
+
+/**
+ * Plan, render, store, and place in-body illustrations for a blog. Replaces any
+ * existing set (idempotent). Best-effort: returns the number generated (0 when
+ * disabled, unkeyed, no specs, or every render failed) without throwing.
+ */
+export async function regenerateBodyImages(id: string): Promise<number> {
+  const blog = await db.blog.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      markdown: true,
+      html: true,
+      topic: { select: { brief: true } },
+    },
+  });
+  if (!blog) throw new Error("Blog not found");
+
+  const settings = await getResolvedSettings();
+  const style = settings.bodyImageStyle;
+  if (style.enabled === false || !settings.geminiApiKey) return 0;
+
+  // Markdown is the source of truth; derive it from HTML on the fly if missing.
+  const baseMarkdown = blog.markdown ?? htmlToMarkdown(blog.html);
+  const cleaned = stripBodyImages(baseMarkdown, id);
+
+  const ai = getGeminiClient(settings.geminiApiKey);
+  const specs = await planBodyImages(ai, settings.geminiModel, {
+    title: blog.title,
+    content: cleaned,
+    count: style.count ?? 3,
+    brief: blog.topic?.brief ?? null,
+  });
+  if (!specs.length) return 0;
+
+  // Render + compress each spec in parallel; drop any that fail.
+  const rendered = await Promise.all(
+    specs.map(async (spec) => {
+      const png = await generateBodyIllustration({
+        apiKey: settings.geminiApiKey!,
+        model: style.imageModel,
+        spec,
+      });
+      if (!png) return null;
+      const data = await compressIllustration(png);
+      return { ...spec, data };
+    }),
+  );
+  const images = rendered
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .map((img, idx) => ({ ...img, idx }));
+  if (!images.length) return 0;
+
+  // Replace the whole set: delete old rows, write the new ones.
+  await db.$transaction([
+    db.blogImage.deleteMany({ where: { blogId: id } }),
+    ...images.map((img) =>
+      db.blogImage.create({
+        data: {
+          blogId: id,
+          idx: img.idx,
+          prompt: img.prompt,
+          alt: img.alt,
+          data: new Uint8Array(img.data),
+          mimeType: "image/webp",
+        },
+      }),
+    ),
+  ]);
+
+  // Inject markdown refs and re-render the HTML from the updated markdown.
+  const placed = placeImagesInMarkdown(
+    cleaned,
+    images.map((img) => ({
+      idx: img.idx,
+      alt: img.alt,
+      url: localImageUrl(id, img.idx),
+      afterHeading: img.afterHeading,
+    })),
+  );
+  await db.blog.update({
+    where: { id },
+    data: { markdown: placed, html: markdownToHtml(placed) },
+    omit: { heroImage: true },
+  });
+
+  return images.length;
+}
+
+/**
+ * Upload each body image to Ghost (caching the hosted URL on the row), then
+ * rewrite the local `/api/blogs/{id}/images/N` srcs in the HTML to the hosted
+ * URLs. Any `<img>` whose upload failed is stripped so no broken image ships.
+ */
+async function resolveBodyImagesForGhost(
+  blogId: string,
+  html: string,
+  ghostApiUrl: string,
+  ghostAdminKey: string,
+): Promise<string> {
+  const rows = await db.blogImage.findMany({
+    where: { blogId },
+    orderBy: { idx: "asc" },
+  });
+  if (!rows.length) return html;
+
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    let ghostUrl = row.ghostUrl;
+    if (!ghostUrl) {
+      try {
+        const filePath = await bodyImageTempFile(
+          blogId,
+          row.idx,
+          Buffer.from(row.data),
+        );
+        ghostUrl = await uploadImageToGhost(ghostApiUrl, ghostAdminKey, filePath);
+        await db.blogImage.update({
+          where: { id: row.id },
+          data: { ghostUrl },
+        });
+      } catch (err) {
+        console.error(
+          "[body-images] Ghost upload failed:",
+          err instanceof Error ? err.message : err,
+        );
+        ghostUrl = null;
+      }
+    }
+    if (ghostUrl) map.set(localImageUrl(blogId, row.idx), ghostUrl);
+  }
+
+  return rewriteBodyImageUrls(html, map);
+}
+
+/** Swap local body-image srcs for hosted Ghost URLs; strip those that failed. */
+function rewriteBodyImageUrls(html: string, map: Map<string, string>): string {
+  return html.replace(/<img\b[^>]*>/g, (tag) => {
+    const m = tag.match(/src="([^"]*\/api\/blogs\/[^"]+\/images\/\d+)"/);
+    if (!m) return tag; // not a body image — leave untouched
+    const ghostUrl = map.get(m[1]);
+    if (!ghostUrl) return ""; // upload failed — drop the tag
+    return tag.replace(m[1], ghostUrl);
+  });
+}
+
 export async function deleteBlog(id: string) {
   await db.blog.delete({ where: { id } });
 }
@@ -122,7 +299,14 @@ export async function publishBlog(id: string, status: "draft" | "published") {
     const heroPath = heroBytes ? await heroTempFile(id, heroBytes) : null;
 
     // Prefer the markdown-derived HTML so what was edited is what gets published.
-    const html = blog.markdown ? markdownToHtml(blog.markdown) : blog.html;
+    const baseHtml = blog.markdown ? markdownToHtml(blog.markdown) : blog.html;
+    // Upload any in-body images to Ghost and point the HTML at the hosted URLs.
+    const html = await resolveBodyImagesForGhost(
+      id,
+      baseHtml,
+      settings.ghostApiUrl,
+      settings.ghostAdminKey,
+    );
 
     const result = await publishToGhost(
       settings.ghostApiUrl,
