@@ -120,10 +120,14 @@ ${currentHtml}
 Return the improved full post as clean semantic HTML.`;
 }
 
+/** Maximum number of sources to list at the end of a post. */
+const MAX_SOURCES = 10;
+
 /** Optionally append a Sources section to the HTML when citations exist. */
 export function appendSources(html: string, citations: Citation[]): string {
   if (!citations.length) return html;
   const items = citations
+    .slice(0, MAX_SOURCES)
     .map(
       (c) =>
         `<li><a href="${escapeAttr(c.url)}" rel="noopener noreferrer">${escapeHtml(
