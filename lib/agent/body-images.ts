@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiClient } from "@/lib/gemini";
-import { generateJSON } from "@/lib/agent/llm";
+import { generateJSON, withRetry } from "@/lib/agent/llm";
 import { IMAGE_PLAN_SCHEMA } from "@/lib/agent/schemas";
 import { BRAND_PROMPT_PALETTE, DEFAULT_IMAGE_MODEL } from "@/lib/agent/image-gen";
 
@@ -118,14 +118,19 @@ export async function generateBodyIllustration(opts: {
 }): Promise<Buffer | null> {
   try {
     const ai = getGeminiClient(opts.apiKey);
-    const res = await ai.models.generateContent({
-      model: opts.model || DEFAULT_IMAGE_MODEL,
-      contents: buildImagePrompt(opts.spec),
-      config: {
-        responseModalities: ["IMAGE"],
-        imageConfig: { aspectRatio: "4:3" },
-      },
-    });
+    // Image preview models 503 under load — retry transient failures with backoff.
+    const res = await withRetry(
+      () =>
+        ai.models.generateContent({
+          model: opts.model || DEFAULT_IMAGE_MODEL,
+          contents: buildImagePrompt(opts.spec),
+          config: {
+            responseModalities: ["IMAGE"],
+            imageConfig: { aspectRatio: "4:3" },
+          },
+        }),
+      4,
+    );
     const parts = res.candidates?.[0]?.content?.parts ?? [];
     for (const part of parts) {
       const data = part.inlineData?.data;

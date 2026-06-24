@@ -159,30 +159,40 @@ export async function regenerateBodyImages(id: string): Promise<number> {
   const cleaned = stripBodyImages(baseMarkdown, id);
 
   const ai = getGeminiClient(settings.geminiApiKey);
-  const specs = await planBodyImages(ai, settings.geminiModel, {
-    title: blog.title,
-    content: cleaned,
-    count: style.count ?? 3,
-    brief: blog.topic?.brief ?? null,
-  });
+  let specs;
+  try {
+    specs = await planBodyImages(ai, settings.geminiModel, {
+      title: blog.title,
+      content: cleaned,
+      count: style.count ?? 3,
+      brief: blog.topic?.brief ?? null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Translate transient model overloads into a clean, retryable message.
+    if (/503|429|unavailable|overloaded|high demand/i.test(msg)) {
+      throw new Error(
+        "The AI model is busy right now (high demand). Please try again in a moment.",
+      );
+    }
+    throw err;
+  }
   if (!specs.length) return 0;
 
-  // Render + compress each spec in parallel; drop any that fail.
-  const rendered = await Promise.all(
-    specs.map(async (spec) => {
-      const png = await generateBodyIllustration({
-        apiKey: settings.geminiApiKey!,
-        model: style.imageModel,
-        spec,
-      });
-      if (!png) return null;
-      const data = await compressIllustration(png);
-      return { ...spec, data };
-    }),
-  );
-  const images = rendered
-    .filter((x): x is NonNullable<typeof x> => x !== null)
-    .map((img, idx) => ({ ...img, idx }));
+  // Render + compress each spec SEQUENTIALLY. The image preview model 503s when
+  // hit with a parallel burst; one-at-a-time (each call retried with backoff)
+  // keeps us under its rate limits. Failed renders are simply dropped.
+  const images: { prompt: string; alt: string; afterHeading: string; data: Buffer; idx: number }[] = [];
+  for (const spec of specs) {
+    const png = await generateBodyIllustration({
+      apiKey: settings.geminiApiKey,
+      model: style.imageModel,
+      spec,
+    });
+    if (!png) continue;
+    const data = await compressIllustration(png);
+    images.push({ ...spec, data, idx: images.length });
+  }
   if (!images.length) return 0;
 
   // Replace the whole set: delete old rows, write the new ones.

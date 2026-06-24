@@ -1,4 +1,5 @@
 import { getGeminiClient } from "@/lib/gemini";
+import { withRetry } from "@/lib/agent/llm";
 
 /** Nano Banana 2 — Gemini 3.1 Flash Image Preview. */
 export const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
@@ -50,14 +51,19 @@ export async function generateHeroBackground(opts: {
 }): Promise<Buffer | null> {
   try {
     const ai = getGeminiClient(opts.apiKey);
-    const res = await ai.models.generateContent({
-      model: opts.model || DEFAULT_IMAGE_MODEL,
-      contents: buildPrompt(opts.title, opts.brief),
-      config: {
-        responseModalities: ["IMAGE"],
-        imageConfig: { aspectRatio: "16:9" },
-      },
-    });
+    // Retry transient 503/429s — the image preview model is flaky under load.
+    const res = await withRetry(
+      () =>
+        ai.models.generateContent({
+          model: opts.model || DEFAULT_IMAGE_MODEL,
+          contents: buildPrompt(opts.title, opts.brief),
+          config: {
+            responseModalities: ["IMAGE"],
+            imageConfig: { aspectRatio: "16:9" },
+          },
+        }),
+      4,
+    );
 
     const parts = res.candidates?.[0]?.content?.parts ?? [];
     for (const part of parts) {
