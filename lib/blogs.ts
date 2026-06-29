@@ -398,6 +398,43 @@ export async function syncAllToGhost(): Promise<SyncResult> {
   return { total: blogs.length, synced, failed, results };
 }
 
+/**
+ * Publish every drafted blog to Ghost (moves each from a Ghost draft to a live
+ * published post). Blogs already published or still drafting are left alone.
+ */
+export async function publishAllDrafts(): Promise<SyncResult> {
+  const settings = await getResolvedSettings();
+  if (!settings.ghostApiUrl || !settings.ghostAdminKey) {
+    throw new Error("Ghost is not configured (see Settings).");
+  }
+
+  const blogs = await db.blog.findMany({
+    where: { status: "drafted" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, title: true },
+  });
+
+  const results: SyncResult["results"] = [];
+  let synced = 0;
+  let failed = 0;
+  for (const b of blogs) {
+    try {
+      await publishBlog(b.id, "published");
+      synced++;
+      results.push({ id: b.id, title: b.title, ok: true });
+    } catch (err) {
+      failed++;
+      results.push({
+        id: b.id,
+        title: b.title,
+        ok: false,
+        error: err instanceof Error ? err.message : "failed",
+      });
+    }
+  }
+  return { total: blogs.length, synced, failed, results };
+}
+
 /** Ensure a blog has markdown content; derive it from HTML on first access. */
 export async function ensureMarkdown(id: string): Promise<string> {
   const blog = await db.blog.findUnique({
